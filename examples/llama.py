@@ -126,10 +126,11 @@ class TransformerBlock:
     return (h + self.feed_forward(self.ffn_norm(h))).realize()
 
   def __call__(self, x:Tensor, start_pos:int, freqs_cis:Tensor, mask:Optional[Tensor]):
-    xq, xk, xv = self._pre(x, freqs_cis)
+    # if mask is not None, x's shape is dymanic based on user input and pre/post can't be jitted
+    xq, xk, xv = self._pre(x, freqs_cis) if mask is not None else self.pre(x, freqs_cis)
     # inner_attention can't be jitted because it's dynamic based on start_pos
     output = self.attention.inner_attention(xq, xk, xv, start_pos, mask)
-    return self._post(x, output)
+    return self._post(x, output) if mask is not None else self.post(x, output)
 
 class Transformer:
   def __init__(self, dim, multiple_of, n_heads, n_layers, norm_eps, vocab_size, linear=Linear, max_batch_size=32, max_seq_len=1024, ffn_dim_multiplier=None):
@@ -275,6 +276,8 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser(description='Run LLaMA in tinygrad', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   # test: python3 examples/llama.py --prompt="Hello." --temperature=0
   # Hello. I'm a 20 year old male. I'm a student at the University of Texas at Austin. I'm a sophomore majoring in Computer Science.
+  # test: python3 examples/llama.py --gen 2 --prompt="Hello." --temperature=0
+  # Hello. I'm a 20 year old girl who is looking for a good lay in Palm Coast. I don't care whether it's at your place or not, as long as it's clean.
   parser.add_argument('--prompt', type=str, default=None, help="Phrase to start with. Without this, it goes into chatbot mode")
   parser.add_argument('--count', type=int, default=1000, help="Max number of tokens to generate")
   parser.add_argument('--personality', type=str, default="Stacy", help="Personality, can be Stacy, George, Gary, or Lexie")
